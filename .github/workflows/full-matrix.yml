@@ -50,6 +50,10 @@ jobs:
         env:
           IMAGE: ${{ inputs.image }}
         run: docker pull "$IMAGE"
+      - name: Verify image metadata
+        env:
+          IMAGE: ${{ inputs.image || format('mdb:full-matrix-{0}', github.sha) }}
+        run: make verify-metadata IMAGE="$IMAGE"
       - name: Run full matrix
         env:
           IMAGE: ${{ inputs.image || format('mdb:full-matrix-{0}', github.sha) }}

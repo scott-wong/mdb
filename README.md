@@ -146,7 +146,7 @@ Valkey、默认配置、示例配置和 entrypoint。`README.md`、`CHANGELOG.md
 
 - Valkey 9.1.3 核心启动、标准 TLS 1.2/1.3、mTLS、国密 TLS 1.3；
 - SM2 证书、SM2 签名、SM2 曲线、SM3 和 SM4-GCM 的真实握手；
-- 主从复制、Sentinel、Cluster 和 Cluster bus TLS；
+- 主从复制、Sentinel 到 Valkey 节点的 TLS、Cluster 和 Cluster bus TLS；
 - 非 root 进程、只读 rootfs、`/data` 持久化、工具别名和私有 Tongsuo 链接；
 - SBOM、Trivy 报告、Cosign keyless 签名和 digest 固定发布。
 

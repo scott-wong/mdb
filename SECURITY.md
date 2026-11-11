@@ -25,6 +25,8 @@ MDB `9.1.x-mdb.N` 是当前支持线。已被新 `mdb.N` 取代的镜像不再�
 - MDB 不宣称 FIPS 合规、商用密码产品认证或“零漏洞”。
 - MDB 不实现 TLCP/NTLS；`MDB_TLS_MODE=gm` 只覆盖 RFC 8998 TLS 1.3。
 - MDB 不提供磁盘加密、KMS、HSM 或多密钥热轮换。
+- MDB 不提供 Sentinel 控制端口的 TLS；上游 Sentinel 的 `26379` 控制端口保持明文，
+  MDB 验证的是 Sentinel 到 Valkey 节点的出站 TLS。
 - MDB 不对 openEuler RPM 提供 Trivy 未覆盖的等价 CVE 结论；Release 会公开扫描
   缺口和 `dnf updateinfo --security` 证据。
 

@@ -14,7 +14,7 @@ endif
 
 .PHONY: help verify fetch build candidate smoke smoke-standard smoke-gm \
         smoke-replication smoke-sentinel smoke-cluster full-matrix \
-        print-build-args release-manifest clean
+        verify-metadata print-build-args release-manifest clean
 
 help:
 	@printf 'MDB %s\n' '$(VERSION)'
@@ -30,6 +30,7 @@ help:
 		'  smoke-sentinel    Sentinel TLS smoke tests' \
 		'  smoke-cluster     Cluster + cluster-bus TLS smoke tests' \
 		'  full-matrix       Run every smoke test for both TLS modes' \
+		'  verify-metadata   Verify image labels, filesystem and linkage' \
 		'  print-build-args  Print immutable Docker build arguments' \
 		'  release-manifest  Generate a release manifest for IMAGE' \
 		'  clean             Remove downloaded/build artifacts'
@@ -81,6 +82,10 @@ smoke-cluster:
 	bash scripts/smoke-cluster.sh "$(IMAGE)" gm
 
 full-matrix: smoke smoke-replication smoke-sentinel smoke-cluster
+
+verify-metadata:
+	test -n "$(IMAGE)"
+	bash scripts/verify-image-metadata.sh "$(IMAGE)"
 
 print-build-args:
 	@set -euo pipefail; \
