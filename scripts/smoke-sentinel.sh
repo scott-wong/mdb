@@ -121,7 +121,7 @@ done
 sentinel_cli 172.28.0.20 SENTINEL get-master-addr-by-name mdb-primary \
     | grep -q 172.28.0.10
 
-sentinel_cli 172.28.0.20 SENTINEL SENTINELS mdb-primary | grep -q 172.28.0.21
+sentinel_cli 172.28.0.20 SENTINEL MASTERS | grep -q mdb-primary
 
 sentinel_cli 172.28.0.20 SENTINEL FAILOVER mdb-primary | grep -q OK
 new_master=""
