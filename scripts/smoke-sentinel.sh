@@ -101,8 +101,11 @@ sentinel_cli() {
 
 for ip in 20 21 22; do
     ready=false
+    index=$((ip - 19))
     for _ in $(seq 1 90); do
-        if sentinel_cli "172.28.0.$ip" PING 2>/dev/null | grep -q PONG; then
+        if timeout 10 docker exec "${PREFIX}-sentinel$index" \
+            /usr/local/bin/mdb-cli -h 127.0.0.1 -p 26379 PING 2>/dev/null \
+            | grep -q PONG; then
             ready=true
             break
         fi

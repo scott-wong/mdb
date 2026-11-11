@@ -56,15 +56,16 @@ cluster_cli() {
 }
 
 wait_for_node() {
-    local ip="$1"
+    local index="$1"
     local _
     for _ in $(seq 1 120); do
-        if timeout 10 docker run --rm --network "$NET" \
-            --env "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf" \
-            --entrypoint /usr/local/bin/mdb-cli \
-            -v "$TMP/$MODE:/certs:ro" "$IMAGE" \
-            --tls --cacert /certs/ca.crt --cert /certs/client.crt --key /certs/client.key \
-            --tls-ciphersuites "$CIPHER" -h "$ip" -p 6379 PING 2>/dev/null | grep -q PONG; then
+        if timeout 10 docker exec \
+            -e "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf" \
+            "${PREFIX}-node$index" \
+            /usr/local/bin/mdb-cli \
+            --tls --cacert /run/mdb/tls/ca.crt --cert /run/mdb/tls/client.crt \
+            --key /run/mdb/tls/client.key --tls-ciphersuites "$CIPHER" \
+            -h 127.0.0.1 -p 6379 PING 2>/dev/null | grep -q PONG; then
             return 0
         fi
         sleep 1
@@ -72,10 +73,11 @@ wait_for_node() {
     return 1
 }
 
-for ip in 10 11 12 13 14 15; do
-    if ! wait_for_node "172.28.0.$ip"; then
+for index in 1 2 3 4 5 6; do
+    ip="172.28.0.1$index"
+    if ! wait_for_node "$index"; then
         for i in 1 2 3 4 5 6; do docker logs "${PREFIX}-node$i" >&2 || true; done
-        echo "ERROR: cluster node 172.28.0.$ip did not become ready" >&2
+        echo "ERROR: cluster node $ip did not become ready" >&2
         exit 1
     fi
 done
