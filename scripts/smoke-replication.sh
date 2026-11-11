@@ -22,7 +22,9 @@ cleanup() {
     docker rm -f "${NAME}-primary" "${NAME}-replica" >/dev/null 2>&1 || true
     docker network rm "$NET" >/dev/null 2>&1 || true
     docker volume rm "$VOL1" "$VOL2" >/dev/null 2>&1 || true
-    rm -rf "$TMP"
+    timeout 20 docker run --rm --entrypoint /bin/bash -v "$TMP:/certs" \
+        "$IMAGE" -c 'rm -rf /certs/*' >/dev/null 2>&1 || true
+    rm -rf "$TMP" || true
 }
 trap cleanup EXIT
 

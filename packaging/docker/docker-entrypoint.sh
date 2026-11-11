@@ -46,7 +46,9 @@ fi
 if [ "$(id -u)" -eq 0 ]; then
     install -d -m 0770 -o 999 -g 999 /data
     install -d -m 0700 -o 999 -g 999 /run/mdb
-    install -d -m 0750 -o root -g 999 /etc/mdb/tls
+    if [ ! -d /etc/mdb/tls ]; then
+        install -d -m 0750 -o root -g 999 /etc/mdb/tls
+    fi
 fi
 
 config_file=""
