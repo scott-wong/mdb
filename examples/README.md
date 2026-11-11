@@ -9,5 +9,10 @@ All examples use `/run/mdb/tls` because the entrypoint stages read-only
 - `cluster-*.conf`: cluster and cluster-bus TLS settings.
 - `sentinel-*.conf`: Sentinel TLS skeletons.
 
+Sentinel's client control port (`26379`) is plaintext in upstream Valkey. The
+`sentinel-*.conf` examples enable `tls-replication yes` so Sentinel authenticates
+to and monitors TLS-enabled Valkey nodes; they do not claim a TLS Sentinel API.
+If the Sentinel control API must be encrypted, put it behind a TLS terminator.
+
 The image does not generate certificates or private keys. Generate them in your
 PKI or test environment and mount them read-only at `/etc/mdb/tls`.

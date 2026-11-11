@@ -154,6 +154,8 @@ Valkey、默认配置、示例配置和 entrypoint。`README.md`、`CHANGELOG.md
 
 - TLCP/NTLS、TLS 1.2 国密套件、FIPS 合规或国密产品认证；
 - 与官方 Valkey 镜像在同一端口同时提供标准证书和 SM2 证书；
+- Sentinel 客户端控制端口的 TLS；上游 Sentinel 的 `26379` 控制端口保持明文，
+  MDB 只验证 Sentinel 到 Valkey 节点的出站 TLS；
 - 磁盘加密、KMS、密钥轮换、HSM 或全盘加密；
 - “零漏洞”或 Tongsuo 与标准 OpenSSL 的 CVE 等价性。
 

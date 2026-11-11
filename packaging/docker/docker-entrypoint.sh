@@ -121,15 +121,6 @@ if [ "$mode" != "off" ]; then
         fi
     fi
 
-    if [ -n "$config_file" ] && [ -r "$config_file" ]; then
-        if [ "$mode" = "gm" ]; then
-            grep -q 'TLS_SM4_GCM_SM3' "$config_file" \
-                || die "GM mode config must select TLS_SM4_GCM_SM3"
-        elif grep -q 'TLS_SM4_GCM_SM3' "$config_file"; then
-            die "standard mode config must not select a GM ciphersuite"
-        fi
-    fi
-
     export OPENSSL_CONF="/usr/local/etc/mdb/openssl-${mode}.cnf"
     printf '%s\n' "$mode" > /run/mdb/tls-mode
     chmod 0644 /run/mdb/tls-mode
