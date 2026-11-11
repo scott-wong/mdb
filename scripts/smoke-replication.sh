@@ -55,7 +55,7 @@ fi
 cli() {
     local host="$1"
     shift
-    docker run --rm --network "$NET" \
+    timeout 30 docker run --rm --network "$NET" \
         --env "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf" \
         --entrypoint /usr/local/bin/mdb-cli \
         -v "$TMP/$MODE:/certs:ro" "$IMAGE" \

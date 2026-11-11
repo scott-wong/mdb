@@ -51,7 +51,7 @@ if ! bash -c 'source "$0/scripts/lib.sh"; for ip in 10 11 12 13 14 15; do wait_f
 fi
 
 cluster_cli() {
-    docker run --rm --network "$NET" \
+    timeout 30 docker run --rm --network "$NET" \
         --env "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf" \
         --entrypoint /usr/local/bin/mdb-cli \
         -v "$TMP/$MODE:/certs:ro" "$IMAGE" \

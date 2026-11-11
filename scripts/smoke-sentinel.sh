@@ -98,7 +98,7 @@ if ! bash -c 'source "$0/scripts/lib.sh"; wait_for_port 172.28.0.20 26380 90; wa
 fi
 
 sentinel_cli() {
-    docker run --rm --network "$NET" \
+    timeout 30 docker run --rm --network "$NET" \
         --env "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf" \
         --entrypoint /usr/local/bin/mdb-cli \
         -v "$TMP/$MODE:/certs:ro" "$IMAGE" \

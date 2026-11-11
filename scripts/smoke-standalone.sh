@@ -51,7 +51,7 @@ if ! bash -c 'source "$0/scripts/lib.sh"; wait_for_port 172.28.0.10 6379 90' "$R
 fi
 
 run_openssl() {
-    docker run --rm --network "$NET" \
+    timeout 30 docker run --rm --network "$NET" \
         --entrypoint /opt/tongsuo/bin/openssl \
         -v "$TMP/$MODE:/certs:ro" \
         "$IMAGE" "$@"
@@ -116,24 +116,24 @@ cli_args=(
     -p 6379
 )
 cli_env=(--env "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf")
-docker run --rm --network "$NET" "${cli_env[@]}" \
+timeout 30 docker run --rm --network "$NET" "${cli_env[@]}" \
     --entrypoint /usr/local/bin/mdb-cli \
     -v "$TMP/$MODE:/certs:ro" "$IMAGE" "${cli_args[@]}" PING \
     | grep -q PONG
 
-docker run --rm --network "$NET" "${cli_env[@]}" \
+timeout 30 docker run --rm --network "$NET" "${cli_env[@]}" \
     --entrypoint /usr/local/bin/valkey-cli \
     -v "$TMP/$MODE:/certs:ro" "$IMAGE" "${cli_args[@]}" SET mdb-smoke ok \
     | grep -q OK
 
-value="$(docker run --rm --network "$NET" "${cli_env[@]}" \
+value="$(timeout 30 docker run --rm --network "$NET" "${cli_env[@]}" \
     --entrypoint /usr/local/bin/mdb-cli \
     -v "$TMP/$MODE:/certs:ro" "$IMAGE" "${cli_args[@]}" GET mdb-smoke)"
 test "$value" = "ok"
 
 # Persistence across a restart.
 docker exec "$NAME" /opt/tongsuo/bin/openssl version >/dev/null
-docker run --rm --network "$NET" "${cli_env[@]}" \
+timeout 30 docker run --rm --network "$NET" "${cli_env[@]}" \
     --entrypoint /usr/local/bin/mdb-cli \
     -v "$TMP/$MODE:/certs:ro" "$IMAGE" "${cli_args[@]}" SAVE | grep -q OK
 docker restart "$NAME" >/dev/null
@@ -142,20 +142,20 @@ if ! bash -c 'source "$0/scripts/lib.sh"; wait_for_port 172.28.0.10 6379 90' "$R
     echo "ERROR: Valkey did not restart" >&2
     exit 1
 fi
-value="$(docker run --rm --network "$NET" "${cli_env[@]}" \
+value="$(timeout 30 docker run --rm --network "$NET" "${cli_env[@]}" \
     --entrypoint /usr/local/bin/mdb-cli \
     -v "$TMP/$MODE:/certs:ro" "$IMAGE" "${cli_args[@]}" GET mdb-smoke)"
 test "$value" = "ok"
 
 # A plaintext client must not be able to speak to the TLS listener.
-if docker run --rm --network "$NET" --entrypoint /usr/local/bin/valkey-cli \
+if timeout 20 docker run --rm --network "$NET" --entrypoint /usr/local/bin/valkey-cli \
     "$IMAGE" -h 172.28.0.10 -p 6379 PING >/dev/null 2>&1; then
     echo "ERROR: plaintext client succeeded against a TLS-only listener" >&2
     exit 1
 fi
 
 # TLS config with mode=off must fail closed.
-if docker run --rm --network "$NET" --env MDB_TLS_MODE=off \
+if timeout 20 docker run --rm --network "$NET" --env MDB_TLS_MODE=off \
     "$IMAGE" valkey-server /usr/local/share/mdb/examples/standard.conf \
     >/dev/null 2>&1; then
     echo "ERROR: TLS config started with MDB_TLS_MODE=off" >&2
@@ -163,7 +163,7 @@ if docker run --rm --network "$NET" --env MDB_TLS_MODE=off \
 fi
 
 docker top "$NAME" -eo user,comm | grep -qE '^999[[:space:]]+valkey-server$'
-if docker run --rm --entrypoint /bin/bash "$IMAGE" -c \
+if timeout 20 docker run --rm --entrypoint /bin/bash "$IMAGE" -c \
     'command -v gcc || command -v make' >/dev/null 2>&1; then
     echo "ERROR: final image contains a compiler or make" >&2
     exit 1
