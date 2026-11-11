@@ -153,7 +153,8 @@ if timeout 20 docker run --rm --network "$NET" --env MDB_TLS_MODE=off \
     exit 1
 fi
 
-docker top "$NAME" -eo user,comm | grep -qE '^999[[:space:]]+valkey-server$'
+docker top "$NAME" -eo pid,user,comm \
+    | awk '$3 == "valkey-server" && $2 == "999" { found=1 } END { exit !found }'
 if timeout 20 docker run --rm --entrypoint /bin/bash "$IMAGE" -c \
     'command -v gcc || command -v make' >/dev/null 2>&1; then
     echo "ERROR: final image contains a compiler or make" >&2
