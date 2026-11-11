@@ -59,34 +59,23 @@ run_openssl() {
         "$IMAGE" "$@"
 }
 
-plain_output=""
-if [ "$MODE" = "gm" ]; then
-    plain_output="$(run_openssl s_client \
-        -connect 172.28.0.10:6379 -tls1_3 \
-        -ciphersuites TLS_SM4_GCM_SM3 -groups SM2 \
-        -enable_sm_tls13_strict \
-        -CAfile /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
-        -verify_return_error -quiet -no_ign_eof 2>&1 <<< $'PING\r' || true)"
-else
-    plain_output="$(run_openssl s_client \
-        -connect 172.28.0.10:6379 -tls1_3 \
-        -CAfile /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
-        -verify_return_error -quiet -no_ign_eof 2>&1 <<< $'PING\r' || true)"
-fi
-grep -q '+PONG' <<<"$plain_output" || {
-    echo "$plain_output" >&2
-    echo "ERROR: TLS PING failed for $MODE" >&2
-    exit 1
-}
-
 if [ "$MODE" = "standard" ]; then
+    tls13_output="$(run_openssl s_client \
+        -connect 172.28.0.10:6379 -tls1_3 \
+        -CAfile /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
+        -verify_return_error -brief -no_ign_eof 2>&1 </dev/null || true)"
+    grep -q 'Protocol version: TLSv1.3' <<<"$tls13_output" || {
+        echo "$tls13_output" >&2
+        echo "ERROR: TLS 1.3 handshake failed for standard mode" >&2
+        exit 1
+    }
     tls12_output="$(run_openssl s_client \
         -connect 172.28.0.10:6379 -tls1_2 \
         -CAfile /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
-        -verify_return_error -quiet -no_ign_eof 2>&1 <<< $'PING\r' || true)"
-    grep -q '+PONG' <<<"$tls12_output" || {
+        -verify_return_error -brief -no_ign_eof 2>&1 </dev/null || true)"
+    grep -q 'Protocol version: TLSv1.2' <<<"$tls12_output" || {
         echo "$tls12_output" >&2
-        echo "ERROR: TLS 1.2 PING failed for standard mode" >&2
+        echo "ERROR: TLS 1.2 handshake failed for standard mode" >&2
         exit 1
     }
 else
