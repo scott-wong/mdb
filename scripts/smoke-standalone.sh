@@ -28,7 +28,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker network create --subnet 172.28.0.0/16 "$NET" >/dev/null
-docker run --rm --entrypoint /bin/bash \
+timeout 60 docker run --rm --entrypoint /bin/bash \
     -v "$TMP:/certs" \
     -v "$ROOT_DIR/test/smoke:/test:ro" \
     "$IMAGE" /test/generate-certs.sh /certs >/dev/null
@@ -51,7 +51,7 @@ if ! bash -c 'source "$0/scripts/lib.sh"; wait_for_port 172.28.0.10 6379 90' "$R
 fi
 
 run_openssl() {
-    timeout 30 docker run --rm --network "$NET" \
+    timeout 12 docker run --rm --network "$NET" \
         --entrypoint /opt/tongsuo/bin/openssl \
         -v "$TMP/$MODE:/certs:ro" \
         "$IMAGE" "$@"
@@ -64,12 +64,12 @@ if [ "$MODE" = "gm" ]; then
         -ciphersuites TLS_SM4_GCM_SM3 -groups SM2 \
         -enable_sm_tls13_strict \
         -CAfile /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
-        -verify_return_error -quiet 2>&1 <<< $'PING\r' || true)"
+        -verify_return_error -quiet -no_ign_eof 2>&1 <<< $'PING\r' || true)"
 else
     plain_output="$(run_openssl s_client \
         -connect 172.28.0.10:6379 -tls1_3 \
         -CAfile /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
-        -verify_return_error -quiet 2>&1 <<< $'PING\r' || true)"
+        -verify_return_error -quiet -no_ign_eof 2>&1 <<< $'PING\r' || true)"
 fi
 grep -q '+PONG' <<<"$plain_output" || {
     echo "$plain_output" >&2
@@ -81,7 +81,7 @@ if [ "$MODE" = "standard" ]; then
     tls12_output="$(run_openssl s_client \
         -connect 172.28.0.10:6379 -tls1_2 \
         -CAfile /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
-        -verify_return_error -quiet 2>&1 <<< $'PING\r' || true)"
+        -verify_return_error -quiet -no_ign_eof 2>&1 <<< $'PING\r' || true)"
     grep -q '+PONG' <<<"$tls12_output" || {
         echo "$tls12_output" >&2
         echo "ERROR: TLS 1.2 PING failed for standard mode" >&2
@@ -93,7 +93,7 @@ else
         -ciphersuites TLS_SM4_GCM_SM3 -groups SM2 \
         -enable_sm_tls13_strict \
         -CAfile /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
-        -verify_return_error 2>&1 </dev/null || true)"
+        -verify_return_error -no_ign_eof 2>&1 </dev/null || true)"
     grep -q 'Cipher is TLS_SM4_GCM_SM3' <<<"$handshake" || {
         echo "$handshake" >&2
         echo "ERROR: GM handshake did not select TLS_SM4_GCM_SM3" >&2
