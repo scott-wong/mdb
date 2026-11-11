@@ -84,17 +84,36 @@ jobs:
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
-  full-matrix:
+  matrix:
     needs: candidate
-    uses: ./.github/workflows/full-matrix.yml
-    with:
-      image: ${{ needs.candidate.outputs.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull candidate
+        env:
+          IMAGE: ${{ needs.candidate.outputs.image }}
+        run: docker pull "$IMAGE"
+      - name: Verify metadata and run full matrix
+        env:
+          IMAGE: ${{ needs.candidate.outputs.image }}
+        run: |
+          make verify-metadata IMAGE="$IMAGE"
+          make full-matrix IMAGE="$IMAGE"
 
   supply-chain:
     needs:
       - validate
       - candidate
-      - full-matrix
+      - matrix
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
