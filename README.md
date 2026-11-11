@@ -10,8 +10,6 @@ MDB 是一个面向 openEuler 的 Valkey 容器发行版：保留 Valkey 核心�
 9.1.3-mdb.1
 ```
 
-> 阶段 A 只生成 `candidate-*` 镜像标签；下文的正式不可变标签要经过单独发布审批后才会存在。
-
 MDB 不是新的缓存引擎，也不是 Valkey 的长期源码 fork。它不包含 Valkey
 Search/JSON/Bloom 模块、代理层、Operator、控制面或自研数据结构。
 
