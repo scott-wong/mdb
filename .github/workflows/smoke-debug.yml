@@ -1,0 +1,33 @@
+name: mdb smoke debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Candidate image"
+        required: true
+        type: string
+      mode:
+        description: "standard or gm"
+        required: true
+        default: standard
+        type: choice
+        options: [standard, gm]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: docker pull "${{ inputs.image }}"
+      - run: bash -x scripts/smoke-standalone.sh "${{ inputs.image }}" "${{ inputs.mode }}"
