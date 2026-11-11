@@ -1,0 +1,78 @@
+name: mdb recover release
+
+# Recovery only promotes an already signed candidate digest. It never rebuilds
+# or moves an existing tag to a different digest.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the leading v"
+        required: true
+        type: string
+      digest:
+        description: "Signed candidate sha256 digest"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Validate version and immutable tag
+        env:
+          VERSION: ${{ inputs.version }}
+          DIGEST: ${{ inputs.digest }}
+        run: |
+          set -euo pipefail
+          test "$(tr -d ' \n' < VERSION)" = "$VERSION"
+          git rev-parse --verify "v${VERSION}^{commit}" >/dev/null
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+      - name: Install crane and cosign
+        run: bash scripts/install-security-tools.sh crane cosign
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify signed candidate
+        env:
+          VERSION: ${{ inputs.version }}
+          DIGEST: ${{ inputs.digest }}
+        run: |
+          set -euo pipefail
+          repo="ghcr.io/scott-wong/mdb"
+          candidate="${repo}:${VERSION}-candidate"
+          test "$(crane digest "$candidate")" = "$DIGEST"
+          cosign verify "${candidate}@${DIGEST}" \
+            --certificate-identity-regexp "https://github.com/scott-wong/mdb/.github/workflows/publish.yml@refs/tags/v${VERSION}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: Promote exact digest
+        env:
+          VERSION: ${{ inputs.version }}
+          DIGEST: ${{ inputs.digest }}
+        run: |
+          set -euo pipefail
+          repo="ghcr.io/scott-wong/mdb"
+          upstream="${VERSION%%-*}"
+          candidate="${repo}:${VERSION}-candidate"
+          for tag in "${VERSION}-openeuler" "${upstream}-openeuler" "latest-openeuler"; do
+            current="$(crane digest "${repo}:${tag}" 2>/dev/null || true)"
+            if [ -n "$current" ]; then
+              test "$current" = "$DIGEST" || {
+                echo "ERROR: ${repo}:${tag} points to $current, expected $DIGEST" >&2
+                exit 1
+              }
+            else
+              crane cp "${candidate}@${DIGEST}" "${repo}:${tag}"
+            fi
+            test "$(crane digest "${repo}:${tag}")" = "$DIGEST"
+          done
