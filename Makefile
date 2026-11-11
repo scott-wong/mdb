@@ -5,6 +5,9 @@ UPSTREAM_VERSION := $(firstword $(subst -, ,$(VERSION)))
 IMAGE ?= mdb:$(VERSION)-openeuler
 PLATFORM ?= linux/amd64
 DOCKER ?= docker
+CACHE ?= 0
+CACHE_REF ?= ghcr.io/scott-wong/mdb:buildcache
+CACHE_ARGS := $(if $(filter 1,$(CACHE)),--cache-from type=registry,ref=$(CACHE_REF) --cache-to type=registry,ref=$(CACHE_REF),mode=max,)
 
 .PHONY: help verify fetch build candidate smoke smoke-standard smoke-gm \
         smoke-replication smoke-sentinel smoke-cluster full-matrix \
@@ -40,7 +43,12 @@ build: fetch verify
 		$(DOCKER) buildx build \
 			--platform $(PLATFORM) \
 			--build-arg OPENEULER_BASE="$${OPENEULER_BASE}" \
+			--build-arg OPENEULER_BASE_DIGEST="$${OPENEULER_BASE_INDEX_DIGEST}" \
+			--build-arg MDB_VALKEY_VERSION="$${VALKEY_VERSION}" \
+			--build-arg MDB_TONGSHUO_VERSION="$${TONGSHUO_VERSION}" \
+			--build-arg MDB_TONGSHUO_OPENSSL_VERSION="$${TONGSHUO_OPENSSL_VERSION}" \
 			--build-arg MDB_VERSION="$(VERSION)" \
+			$(CACHE_ARGS) \
 			--load \
 			-t "$(IMAGE)" \
 			-f packaging/docker/Dockerfile .

@@ -5,6 +5,10 @@
 # profiles. TLCP/NTLS is intentionally not built.
 
 ARG OPENEULER_BASE=quay.io/openeuler/openeuler:24.03-lts-sp4@sha256:17c15554be2a5bc46023acb6e04d609d77642b8c20e236e88deb18e41ae4558e
+ARG OPENEULER_BASE_DIGEST=sha256:17c15554be2a5bc46023acb6e04d609d77642b8c20e236e88deb18e41ae4558e
+ARG MDB_VALKEY_VERSION=9.1.3
+ARG MDB_TONGSHUO_VERSION=8.5.0
+ARG MDB_TONGSHUO_OPENSSL_VERSION=3.5.4
 
 FROM ${OPENEULER_BASE} AS builder
 
@@ -24,6 +28,10 @@ RUN bash /opt/mdb/scripts/build-tini.sh
 FROM ${OPENEULER_BASE} AS final
 
 ARG MDB_VERSION=9.1.3-mdb.1
+ARG OPENEULER_BASE_DIGEST
+ARG MDB_VALKEY_VERSION
+ARG MDB_TONGSHUO_VERSION
+ARG MDB_TONGSHUO_OPENSSL_VERSION
 
 LABEL org.opencontainers.image.title="MDB" \
       org.opencontainers.image.description="MDB, an openEuler Valkey distribution with Tongsuo RFC 8998 TLS" \
@@ -31,11 +39,11 @@ LABEL org.opencontainers.image.title="MDB" \
       org.opencontainers.image.licenses="Apache-2.0 AND BSD-3-Clause" \
       org.opencontainers.image.source="https://github.com/scott-wong/mdb" \
       org.opencontainers.image.base.name="quay.io/openeuler/openeuler:24.03-lts-sp4" \
-      org.opencontainers.image.base.digest="sha256:17c15554be2a5bc46023acb6e04d609d77642b8c20e236e88deb18e41ae4558e" \
+      org.opencontainers.image.base.digest="${OPENEULER_BASE_DIGEST}" \
       org.opencontainers.image.vendor="MDB" \
-      io.mdb.valkey.version="9.1.3" \
-      io.mdb.tongsuo.version="8.5.0" \
-      io.mdb.tongsuo.openssl-baseline="3.5.4" \
+      io.mdb.valkey.version="${MDB_VALKEY_VERSION}" \
+      io.mdb.tongsuo.version="${MDB_TONGSHUO_VERSION}" \
+      io.mdb.tongsuo.openssl-baseline="${MDB_TONGSHUO_OPENSSL_VERSION}" \
       io.mdb.tls.rfc8998="true" \
       io.mdb.tls.tlcp="false" \
       io.mdb.tls.modes="standard,gm" \
@@ -69,7 +77,7 @@ COPY --from=builder /opt/mdb/tini/bin/tini-static /usr/bin/tini
 
 RUN find /opt/tongsuo -type f \( -name '*.h' -o -name '*.a' -o -name '*.pc' \) -delete \
     && rm -rf /opt/tongsuo/include /opt/tongsuo/share/man /opt/tongsuo/share/doc \
-    && VALKEY_VERSION=9.1.3 TONGSHUO_VERSION=8.5.0 \
+    && VALKEY_VERSION="$MDB_VALKEY_VERSION" TONGSHUO_VERSION="$MDB_TONGSHUO_VERSION" \
        bash /opt/mdb/scripts/prepare-image.sh "$MDB_VERSION" \
     && rm -rf /opt/mdb
 
