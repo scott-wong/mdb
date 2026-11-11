@@ -6,6 +6,8 @@ not.
 
 ## [Unreleased]
 
+## [9.1.3-mdb.1] - 2026-11-11
+
 ### Added
 
 - Initial MDB `9.1.3-mdb.1` scaffold for openEuler 24.03 LTS SP4.
