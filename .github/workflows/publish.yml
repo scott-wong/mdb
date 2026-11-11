@@ -1,0 +1,256 @@
+name: mdb publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mdb-publish
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate immutable tag
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(tr -d ' \n' < VERSION)"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: distfiles
+          key: mdb-sources-${{ hashFiles('scripts/baseline.env') }}
+          restore-keys: |
+            mdb-sources-
+      - run: make fetch
+      - run: make verify
+      - run: bash scripts/verify-remote-baselines.sh
+
+  candidate:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: distfiles
+          key: mdb-sources-${{ hashFiles('scripts/baseline.env') }}
+          restore-keys: |
+            mdb-sources-
+      - name: Resolve candidate ref
+        id: ref
+        run: echo "image=ghcr.io/scott-wong/mdb:${{ needs.validate.outputs.version }}-candidate" >> "$GITHUB_OUTPUT"
+      - name: Build candidate
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+        run: make build
+      - name: Push candidate
+        id: push
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+        run: |
+          set -euo pipefail
+          docker push "$IMAGE"
+          digest="$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+  full-matrix:
+    needs: candidate
+    uses: ./.github/workflows/full-matrix.yml
+    with:
+      image: ${{ needs.candidate.outputs.image }}
+
+  supply-chain:
+    needs:
+      - validate
+      - candidate
+      - full-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      digest: ${{ needs.candidate.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install security tools
+        run: bash scripts/install-security-tools.sh syft trivy cosign crane
+      - name: Pull candidate
+        run: docker pull "${{ needs.candidate.outputs.image }}"
+      - name: Generate SBOM
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          syft scan "docker:${{ needs.candidate.outputs.image }}" \
+            -o cyclonedx-json > "artifacts/mdb-${{
+              needs.validate.outputs.version
+            }}.cyclonedx.json"
+      - name: Trivy gate
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          set +e
+          trivy image --scanners vuln,secret --severity HIGH,CRITICAL \
+            --ignore-unfixed --exit-code 1 \
+            --format sarif -o artifacts/trivy.sarif \
+            "${{ needs.candidate.outputs.image }}"
+          rc=$?
+          trivy image --scanners vuln,secret --severity HIGH,CRITICAL \
+            --exit-code 0 --format table \
+            "${{ needs.candidate.outputs.image }}" > artifacts/trivy.txt 2>&1 || true
+          exit "$rc"
+      - name: openEuler security evidence
+        continue-on-error: true
+        run: |
+          docker run --rm --entrypoint /bin/bash "${{ needs.candidate.outputs.image }}" \
+            -c 'dnf updateinfo --security 2>&1 || true' \
+            > artifacts/openEuler-security-evidence.txt
+      - name: Generate release manifest and checksums
+        env:
+          IMAGE: ${{ needs.candidate.outputs.image }}
+          SBOM_PATH: ${{ format('artifacts/mdb-{0}.cyclonedx.json', needs.validate.outputs.version) }}
+          TRIVY_PATH: artifacts/trivy.sarif
+        run: |
+          set -euo pipefail
+          bash scripts/generate-release-manifest.sh "$IMAGE"
+          (cd artifacts && sha256sum ./* > SHA256SUMS)
+      - name: Sign digest and attest SBOM
+        env:
+          IMAGE: ${{ needs.candidate.outputs.image }}
+          DIGEST: ${{ needs.candidate.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="${IMAGE}@${DIGEST}"
+          cosign sign --yes "$ref"
+          cosign attest --yes --predicate artifacts/mdb-*.cyclonedx.json \
+            --type cyclonedx "$ref"
+          cosign verify "$ref" \
+            --certificate-identity-regexp 'https://github.com/scott-wong/mdb/.github/workflows/publish.yml@refs/tags/.*' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            > artifacts/cosign-verify.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mdb-release-evidence
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
+  promote:
+    needs:
+      - validate
+      - candidate
+      - supply-chain
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install crane
+        run: bash scripts/install-security-tools.sh crane
+      - name: Refuse to move existing tags
+        env:
+          CANDIDATE: ${{ needs.candidate.outputs.image }}
+          DIGEST: ${{ needs.candidate.outputs.digest }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          repo="${CANDIDATE%:*}"
+          upstream="${VERSION%%-*}"
+          for tag in "${VERSION}-openeuler" "${upstream}-openeuler" "latest-openeuler"; do
+            if crane digest "${repo}:${tag}" >/dev/null 2>&1; then
+              echo "ERROR: refusing to move existing tag ${repo}:${tag}" >&2
+              exit 1
+            fi
+          done
+      - name: Promote exact digest
+        env:
+          CANDIDATE: ${{ needs.candidate.outputs.image }}
+          DIGEST: ${{ needs.candidate.outputs.digest }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          repo="${CANDIDATE%:*}"
+          upstream="${VERSION%%-*}"
+          for tag in "${VERSION}-openeuler" "${upstream}-openeuler" "latest-openeuler"; do
+            crane cp "${CANDIDATE}@${DIGEST}" "${repo}:${tag}"
+            test "$(crane digest "${repo}:${tag}")" = "$DIGEST"
+          done
+
+  release:
+    needs:
+      - validate
+      - candidate
+      - promote
+      - supply-chain
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install cosign
+        run: bash scripts/install-security-tools.sh cosign
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: mdb-release-evidence
+          path: artifacts
+      - name: Verify released digest and signature
+        env:
+          DIGEST: ${{ needs.candidate.outputs.digest }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/scott-wong/mdb:${VERSION}-openeuler"
+          test "$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')" = "$DIGEST"
+          cosign verify "${image}@${DIGEST}" \
+            --certificate-identity-regexp 'https://github.com/scott-wong/mdb/.github/workflows/publish.yml@refs/tags/.*' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            > artifacts/cosign-final-verify.txt
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          DIGEST: ${{ needs.candidate.outputs.digest }}
+        run: |
+          set -euo pipefail
+          {
+            echo "MDB ${VERSION}"
+            echo
+            echo "Immutable image digest: \`${DIGEST}\`"
+          } > artifacts/release-notes.md
+          gh release create "v${VERSION}" artifacts/* \
+            --title "MDB ${VERSION}" \
+            --notes-file artifacts/release-notes.md

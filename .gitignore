@@ -1,0 +1,8 @@
+.DS_Store
+artifacts/
+distfiles/*.tar.gz
+test/certs/*
+!test/certs/.gitkeep
+out/
+*.pyc
+__pycache__/

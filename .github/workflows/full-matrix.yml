@@ -1,0 +1,54 @@
+name: mdb full matrix
+
+on:
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Optional existing candidate image; empty builds from source"
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      image:
+        description: "Candidate image to test"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: distfiles
+          key: mdb-sources-${{ hashFiles('scripts/baseline.env') }}
+          restore-keys: |
+            mdb-sources-
+      - name: Build source image
+        if: inputs.image == ''
+        env:
+          IMAGE: mdb:full-matrix-${{ github.sha }}
+        run: make build
+      - name: Pull candidate image
+        if: inputs.image != ''
+        env:
+          IMAGE: ${{ inputs.image }}
+        run: docker pull "$IMAGE"
+      - name: Run full matrix
+        env:
+          IMAGE: ${{ inputs.image || format('mdb:full-matrix-{0}', github.sha) }}
+        run: make full-matrix IMAGE="$IMAGE"
