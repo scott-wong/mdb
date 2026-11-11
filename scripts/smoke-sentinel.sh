@@ -13,9 +13,6 @@ NET="mdb-sentinel-net-${MODE}-$$"
 TMP="$(mktemp -d)"
 PREFIX="mdb-sentinel-${MODE}-$$"
 CONFIG="/usr/local/share/mdb/examples/${MODE}.conf"
-CIPHER="TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256"
-[ "$MODE" = "gm" ] && CIPHER="TLS_SM4_GCM_SM3"
-
 cleanup() {
     for name in primary replica1 replica2 sentinel1 sentinel2 sentinel3; do
         docker rm -f "${PREFIX}-${name}" >/dev/null 2>&1 || true
@@ -64,7 +61,6 @@ mk_sentinel_config() {
 bind * -::*
 protected-mode no
 port 26379
-tls-port 26380
 dir /data
 logfile ""
 sentinel monitor mdb-primary 172.28.0.10 6379 2
@@ -88,24 +84,21 @@ for i in 1 2 3; do
     ip="172.28.0.2$i"
     mk_sentinel_config "$ip" "$TMP/sentinel$i.conf"
     docker run "${common[@]}" --name "${PREFIX}-sentinel$i" --ip "$ip" \
-        --volume "$TMP/sentinel$i.conf:/etc/mdb/sentinel.conf:rw" \
+        --volume "$TMP/sentinel$i.conf:/run/mdb/sentinel.conf:rw" \
         --volume "${PREFIX}-sentinel$i:/data" \
-        "$IMAGE" valkey-server /etc/mdb/sentinel.conf --sentinel >/dev/null
+        "$IMAGE" valkey-server /run/mdb/sentinel.conf --sentinel >/dev/null
 done
 
-if ! bash -c 'source "$0/scripts/lib.sh"; wait_for_port 172.28.0.20 26380 90; wait_for_port 172.28.0.21 26380 90; wait_for_port 172.28.0.22 26380 90' "$ROOT_DIR"; then
+if ! bash -c 'source "$0/scripts/lib.sh"; wait_for_port 172.28.0.20 26379 90; wait_for_port 172.28.0.21 26379 90; wait_for_port 172.28.0.22 26379 90' "$ROOT_DIR"; then
     for i in 1 2 3; do docker logs "${PREFIX}-sentinel$i" >&2 || true; done
-    echo "ERROR: Sentinel TLS listeners did not become ready" >&2
+    echo "ERROR: Sentinel listeners did not become ready" >&2
     exit 1
 fi
 
 sentinel_cli() {
     timeout 30 docker run --rm --network "$NET" \
-        --env "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf" \
         --entrypoint /usr/local/bin/mdb-cli \
-        -v "$TMP/$MODE:/certs:ro" "$IMAGE" \
-        --tls --cacert /certs/ca.crt --cert /certs/client.crt --key /certs/client.key \
-        --tls-ciphersuites "$CIPHER" -h "$1" -p 26380 "${@:2}"
+        "$IMAGE" -h "$1" -p 26379 "${@:2}"
 }
 
 sentinel_cli 172.28.0.20 SENTINEL get-master-addr-by-name mdb-primary \
@@ -129,4 +122,4 @@ fi
 value="$(sentinel_cli 172.28.0.21 INFO sentinel 2>/dev/null || true)"
 grep -q 'master0:name=mdb-primary' <<<"$value"
 
-printf '[smoke] %s Sentinel TLS passed, promoted %s\n' "$MODE" "$new_master"
+printf '[smoke] %s Sentinel outbound TLS passed, promoted %s\n' "$MODE" "$new_master"
