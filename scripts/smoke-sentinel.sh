@@ -81,7 +81,7 @@ EOF
 }
 
 for i in 1 2 3; do
-    ip="172.28.0.2$i"
+    ip="172.28.0.$((19 + i))"
     mk_sentinel_config "$ip" "$TMP/sentinel$i.conf"
     volume="${PREFIX}-sentinel$i"
     docker run --rm --entrypoint /bin/bash \

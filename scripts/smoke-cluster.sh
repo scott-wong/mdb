@@ -34,7 +34,7 @@ docker run --rm --entrypoint /bin/bash \
     "$IMAGE" /test/generate-certs.sh /certs >/dev/null
 
 for i in 1 2 3 4 5 6; do
-    ip="172.28.0.1$i"
+    ip="172.28.0.$((9 + i))"
     docker run --detach --name "${PREFIX}-node$i" --network "$NET" --ip "$ip" \
         --env "MDB_TLS_MODE=$MODE" \
         --mount "type=bind,src=$TMP/$MODE,dst=/etc/mdb/tls,readonly" \
