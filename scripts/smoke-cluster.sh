@@ -46,12 +46,6 @@ for i in 1 2 3 4 5 6; do
         --cluster-announce-bus-port 16379 >/dev/null
 done
 
-if ! bash -c 'source "$0/scripts/lib.sh"; for ip in 10 11 12 13 14 15; do wait_for_port "172.28.0.$ip" 6379 120 || exit 1; done' "$ROOT_DIR"; then
-    for i in 1 2 3 4 5 6; do docker logs "${PREFIX}-node$i" >&2 || true; done
-    echo "ERROR: cluster nodes did not become ready" >&2
-    exit 1
-fi
-
 cluster_cli() {
     timeout 30 docker run --rm --network "$NET" \
         --env "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf" \
@@ -60,6 +54,31 @@ cluster_cli() {
         --tls --cacert /certs/ca.crt --cert /certs/client.crt --key /certs/client.key \
         --tls-ciphersuites "$CIPHER" "$@"
 }
+
+wait_for_node() {
+    local ip="$1"
+    local _
+    for _ in $(seq 1 120); do
+        if timeout 10 docker run --rm --network "$NET" \
+            --env "OPENSSL_CONF=/usr/local/etc/mdb/openssl-${MODE}.cnf" \
+            --entrypoint /usr/local/bin/mdb-cli \
+            -v "$TMP/$MODE:/certs:ro" "$IMAGE" \
+            --tls --cacert /certs/ca.crt --cert /certs/client.crt --key /certs/client.key \
+            --tls-ciphersuites "$CIPHER" -h "$ip" -p 6379 PING 2>/dev/null | grep -q PONG; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+for ip in 10 11 12 13 14 15; do
+    if ! wait_for_node "172.28.0.$ip"; then
+        for i in 1 2 3 4 5 6; do docker logs "${PREFIX}-node$i" >&2 || true; done
+        echo "ERROR: cluster node 172.28.0.$ip did not become ready" >&2
+        exit 1
+    fi
+done
 
 cluster_cli --cluster create \
     172.28.0.10:6379 172.28.0.11:6379 172.28.0.12:6379 \
