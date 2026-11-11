@@ -13,6 +13,12 @@ on:
         default: standard
         type: choice
         options: [standard, gm]
+      suite:
+        description: "Smoke suite"
+        required: true
+        default: standalone
+        type: choice
+        options: [standalone, replication, sentinel, cluster]
 
 permissions:
   contents: read
@@ -30,4 +36,4 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: docker pull "${{ inputs.image }}"
-      - run: bash -x scripts/smoke-standalone.sh "${{ inputs.image }}" "${{ inputs.mode }}"
+      - run: bash -x "scripts/smoke-${{ inputs.suite }}.sh" "${{ inputs.image }}" "${{ inputs.mode }}"
