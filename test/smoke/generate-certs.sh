@@ -5,7 +5,9 @@ out="${1:?output directory is required}"
 openssl="${OPENSSL_BIN:-/opt/tongsuo/bin/openssl}"
 test -x "$openssl"
 
-rm -rf "$out"
+mkdir -p "$out"
+rm -rf "$out/standard" "$out/gm"
+rm -f "$out"/*.ext "$out"/*.srl
 mkdir -p "$out/standard" "$out/gm"
 
 san="DNS:localhost,DNS:mdb-standard,DNS:mdb-gm,DNS:mdb-node1,DNS:mdb-node2,DNS:mdb-node3,DNS:mdb-node4,DNS:mdb-node5,DNS:mdb-node6,IP:127.0.0.1,IP:172.28.0.10,IP:172.28.0.11,IP:172.28.0.12,IP:172.28.0.13,IP:172.28.0.14,IP:172.28.0.15,IP:172.28.0.16"
