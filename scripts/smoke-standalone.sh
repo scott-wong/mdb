@@ -90,9 +90,14 @@ else
         echo "ERROR: GM handshake did not select TLS_SM4_GCM_SM3" >&2
         exit 1
     }
-    grep -q 'Peer signature type: SM2' <<<"$handshake" || {
+    grep -q 'Peer signature type: sm2sig_sm3' <<<"$handshake" || {
         echo "$handshake" >&2
         echo "ERROR: GM handshake did not use SM2 signatures" >&2
+        exit 1
+    }
+    grep -q 'Peer Temp Key: ECDH, SM2' <<<"$handshake" || {
+        echo "$handshake" >&2
+        echo "ERROR: GM handshake did not use the SM2 key-exchange group" >&2
         exit 1
     }
 fi
