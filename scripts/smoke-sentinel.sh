@@ -83,23 +83,37 @@ EOF
 for i in 1 2 3; do
     ip="172.28.0.2$i"
     mk_sentinel_config "$ip" "$TMP/sentinel$i.conf"
+    volume="${PREFIX}-sentinel$i"
+    docker run --rm --entrypoint /bin/bash \
+        -v "$volume:/data" \
+        -v "$TMP/sentinel$i.conf:/src.conf:ro" \
+        "$IMAGE" -c 'install -m 0666 /src.conf /data/sentinel.conf'
     docker run "${common[@]}" --name "${PREFIX}-sentinel$i" --ip "$ip" \
-        --volume "$TMP/sentinel$i.conf:/run/mdb/sentinel.conf:rw" \
-        --volume "${PREFIX}-sentinel$i:/data" \
-        "$IMAGE" valkey-server /run/mdb/sentinel.conf --sentinel >/dev/null
+        --volume "$volume:/data" \
+        "$IMAGE" valkey-server /data/sentinel.conf --sentinel >/dev/null
 done
-
-if ! bash -c 'source "$0/scripts/lib.sh"; wait_for_port 172.28.0.20 26379 90; wait_for_port 172.28.0.21 26379 90; wait_for_port 172.28.0.22 26379 90' "$ROOT_DIR"; then
-    for i in 1 2 3; do docker logs "${PREFIX}-sentinel$i" >&2 || true; done
-    echo "ERROR: Sentinel listeners did not become ready" >&2
-    exit 1
-fi
 
 sentinel_cli() {
     timeout 30 docker run --rm --network "$NET" \
         --entrypoint /usr/local/bin/mdb-cli \
         "$IMAGE" -h "$1" -p 26379 "${@:2}"
 }
+
+for ip in 20 21 22; do
+    ready=false
+    for _ in $(seq 1 90); do
+        if sentinel_cli "172.28.0.$ip" PING 2>/dev/null | grep -q PONG; then
+            ready=true
+            break
+        fi
+        sleep 1
+    done
+    if [ "$ready" != true ]; then
+        for i in 1 2 3; do docker logs "${PREFIX}-sentinel$i" >&2 || true; done
+        echo "ERROR: Sentinel 172.28.0.$ip did not become ready" >&2
+        exit 1
+    fi
+done
 
 sentinel_cli 172.28.0.20 SENTINEL get-master-addr-by-name mdb-primary \
     | grep -q 172.28.0.10
