@@ -7,7 +7,10 @@ PLATFORM ?= linux/amd64
 DOCKER ?= docker
 CACHE ?= 0
 CACHE_REF ?= ghcr.io/scott-wong/mdb:buildcache
-CACHE_ARGS := $(if $(filter 1,$(CACHE)),--cache-from type=registry,ref=$(CACHE_REF) --cache-to type=registry,ref=$(CACHE_REF),mode=max,)
+CACHE_ARGS :=
+ifeq ($(CACHE),1)
+CACHE_ARGS := --cache-from type=registry,ref=$(CACHE_REF) --cache-to type=registry,ref=$(CACHE_REF),mode=max
+endif
 
 .PHONY: help verify fetch build candidate smoke smoke-standard smoke-gm \
         smoke-replication smoke-sentinel smoke-cluster full-matrix \
