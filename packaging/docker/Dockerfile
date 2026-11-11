@@ -11,7 +11,9 @@ FROM ${OPENEULER_BASE} AS builder
 ENV DISTRO=openeuler
 WORKDIR /opt/mdb
 
-COPY scripts/ /opt/mdb/scripts/
+COPY scripts/baseline.env scripts/lib.sh scripts/configure-openeuler-repo.sh \
+    scripts/install-build-deps.sh scripts/build-tongsuo.sh \
+    scripts/build-valkey.sh scripts/build-tini.sh /opt/mdb/scripts/
 COPY distfiles/ /opt/mdb/distfiles/
 
 RUN bash /opt/mdb/scripts/install-build-deps.sh
