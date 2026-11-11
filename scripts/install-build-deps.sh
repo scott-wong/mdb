@@ -10,7 +10,7 @@ dnf -y --setopt=max_parallel_downloads=10 makecache
 dnf -y --setopt=install_weak_deps=False \
     --setopt=max_parallel_downloads=10 install \
     binutils bzip2 ca-certificates cmake curl diffutils findutils gawk gcc gcc-c++ \
-    git gzip make patch perl perl-Digest-SHA perl-FindBin perl-IPC-Cmd perl-Pod-Html \
+    git gzip make patch perl perl-Digest-SHA perl-IPC-Cmd \
     pkgconf procps-ng tar which xz zlib-devel
 dnf clean all
 rm -rf /var/cache/dnf
